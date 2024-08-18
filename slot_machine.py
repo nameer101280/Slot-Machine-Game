@@ -1,9 +1,42 @@
+import tkinter as tk
+from tkinter import messagebox
+from PIL import Image, ImageTk
 import random
+import time
+import pygame
 
-MAX_LINES = 3
-MAX_BET = 100
-MIN_BET = 1
+# Initialize Pygame for sound
+pygame.mixer.init()
 
+# Initialize the main window
+root = tk.Tk()
+root.title("Slot Machine Game")
+root.geometry("800x600")
+
+# Load images
+bg_image = Image.open("background.jpeg")
+bg_photo = ImageTk.PhotoImage(bg_image)
+bg_label = tk.Label(root, image=bg_photo)
+bg_label.place(relwidth=1, relheight=1)
+
+# Load symbols and button images
+reel_images = {
+    "A": ImageTk.PhotoImage(Image.open("symbol_A.png")),
+    "B": ImageTk.PhotoImage(Image.open("symbol_B.png")),
+    "C": ImageTk.PhotoImage(Image.open("symbol_C.png")),
+    "D": ImageTk.PhotoImage(Image.open("symbol_D.png"))
+}
+
+spin_button_image = ImageTk.PhotoImage(Image.open("spin_button.jpeg"))
+deposit_button_image = ImageTk.PhotoImage(Image.open("deposit_button.jpeg"))
+
+# Load sound effects
+spin_sound = pygame.mixer.Sound("spin.wav")
+win_sound = pygame.mixer.Sound("win.wav")
+lose_sound = pygame.mixer.Sound("lose.wav")
+
+# Global variables
+balance = 0
 ROWS = 3
 COLS = 3
 
@@ -21,6 +54,47 @@ symbol_value = {
     "D": 2
 }
 
+# Create labels for the slot reels
+reel_labels = []
+for i in range(COLS):
+    reel_label = tk.Label(root, bg="white", width=10, height=5, borderwidth=2, relief="solid")
+    reel_label.place(x=200 + i*100, y=200)
+    reel_labels.append(reel_label)
+
+def spin_animation(spins=20):
+    for _ in range(spins):
+        for reel_label in reel_labels:
+            reel_label.config(image=random.choice(list(reel_images.values())))
+        root.update_idletasks()
+        time.sleep(0.1)
+
+def deposit():
+    global balance
+    amount = deposit_entry.get()
+    if amount.isdigit():
+        balance += int(amount)
+        balance_label.config(text=f"Balance: ${balance}")
+        deposit_entry.delete(0, tk.END)
+    else:
+        messagebox.showerror("Invalid Input", "Please enter a valid number")
+
+def get_slot_machine_spin(rows, cols, symbols):
+    all_symbols = []
+    for symbol, symbol_count in symbols.items():
+        all_symbols.extend([symbol] * symbol_count)
+
+    columns = []
+    for _ in range(cols):
+        column = []
+        current_symbols = all_symbols[:]
+        for _ in range(rows):
+            value = random.choice(current_symbols)
+            current_symbols.remove(value)
+            column.append(value)
+        columns.append(column)
+
+    return columns
+
 def check_winnings(columns, lines, bet, values):
     winnings = 0
     winning_lines = []
@@ -31,113 +105,68 @@ def check_winnings(columns, lines, bet, values):
                 break
         else:
             winnings += values[symbol] * bet
-            winning_lines.append(line + 1)  # Append the line number where the win happened
-            
+            winning_lines.append(line + 1)
     return winnings, winning_lines
-                 
-def get_slot_machine_spin(rows, cols, symbols):
-    all_symbols = []
-    for symbol, symbol_count in symbols.items():
-        all_symbols.extend([symbol] * symbol_count)  # Use extend to add symbols to the list
-        
-    columns = []
-    for _ in range(cols):
-        column = []
-        current_symbols = all_symbols[:]
-        for _ in range(rows):
-            value = random.choice(current_symbols)
-            current_symbols.remove(value)
-            column.append(value)
-        columns.append(column)
-        
-    return columns
 
-def print_slot_machine(columns):
-    for row in range(len(columns[0])):
-        for i, column in enumerate(columns):
-            if i != len(columns) - 1:
-                print(column[row], end=" | ")    
-            else:
-                print(column[row], end="")
-        print()
-
-def deposit():
-    while True:
-        amount = input("What would you like to deposit? $")
-        if amount.isdigit():
-            amount = int(amount)
-            if amount > 0:
-                break
-            else:
-                print("Amount must be greater than 0.")
-        else:
-            print("Please enter a number.")
-                
-    return amount
-
-def get_number_of_lines():
-    while True:
-        lines = input(f"Enter the number of lines to bet on (1-{MAX_LINES})? ")
-        if lines.isdigit():
-            lines = int(lines)
-            if 1 <= lines <= MAX_LINES:
-                break
-            else:
-                print("Enter a valid number of lines.")
-        else:
-            print("Please enter a number.")
-                
-    return lines
-
-def get_bet():
-    while True:
-        amount = input("What would you like to bet on each line? $")
-        if amount.isdigit():
-            amount = int(amount)
-            if MIN_BET <= amount <= MAX_BET:
-                break
-            else:
-                print(f"Amount must be between ${MIN_BET} - ${MAX_BET}.")
-        else:
-            print("Please enter a number.")
-                
-    return amount
-
-def spin(balance):
-    lines = get_number_of_lines()
+def spin():
+    global balance
+    lines = int(lines_entry.get())
+    bet = int(bet_entry.get())
+    total_bet = lines * bet
     
-    while True:
-        bet = get_bet()
-        total_bet = bet * lines
-        
-        if total_bet > balance:
-            print(f"You do not have enough to bet that amount, your current balance is: ${balance}")
-        else:
-            break
-        
-    print(f"You are betting ${bet} on {lines} lines. Total bet is equal to: ${total_bet}")
+    if total_bet > balance:
+        messagebox.showerror("Insufficient Funds", "You do not have enough balance for this bet")
+        return
     
-    balance -= total_bet  # Update the balance after betting
-    print(f"Your remaining balance is: ${balance}")
+    balance -= total_bet
+    balance_label.config(text=f"Balance: ${balance}")
     
-    # Display the slot machine result
+    pygame.mixer.Sound.play(spin_sound)
+    spin_animation()
+    
     slots = get_slot_machine_spin(ROWS, COLS, symbol_count)
-    print_slot_machine(slots)
+    for i, reel_label in enumerate(reel_labels):
+        reel_label.config(image=reel_images[slots[i][0]])
+    
     winnings, winnings_lines = check_winnings(slots, lines, bet, symbol_value)
-    print(f"You Won ${winnings}.")
-    print(f"You Won on lines:", *winnings_lines)  # Fixed the variable name
-    return winnings - total_bet  # Corrected to subtract total_bet from winnings
+    balance += winnings
+    balance_label.config(text=f"Balance: ${balance}")
+    
+    if winnings > 0:
+        pygame.mixer.Sound.play(win_sound)
+    else:
+        pygame.mixer.Sound.play(lose_sound)
+    
+    slot_text.set("\n".join([" | ".join(row) for row in zip(*slots)]))
+    winnings_text.set(f"You Won ${winnings} on lines {', '.join(map(str, winnings_lines)) if winnings_lines else 'none'}")
 
-def main():
-    balance = deposit()   
-    while True:
-        print(f"Current balance is ${balance}")
-        answer = input("Press enter to play (q to quit).")
-        if answer == "q":
-            break
-        balance += spin(balance)
-        
-    print(f"You left with ${balance}")
-     
+# UI Elements
+balance_label = tk.Label(root, text=f"Balance: ${balance}", font=("Helvetica", 16), bg="lightblue", fg="black", padx=10, pady=5)
+balance_label.place(x=50, y=50)
 
-main()
+deposit_entry = tk.Entry(root)
+deposit_entry.place(x=50, y=100)
+deposit_button = tk.Button(root, image=deposit_button_image, command=deposit)
+deposit_button.place(x=200, y=90)
+
+lines_entry = tk.Entry(root)
+lines_entry.place(x=50, y=150)
+lines_entry.insert(0, "1")
+
+bet_entry = tk.Entry(root)
+bet_entry.place(x=50, y=200)
+bet_entry.insert(0, "1")
+
+spin_button = tk.Button(root, image=spin_button_image, command=spin)
+spin_button.place(x=200, y=250)
+
+slot_text = tk.StringVar()
+slot_label = tk.Label(root, textvariable=slot_text, font=("Helvetica", 16), bg="white", fg="black", width=30, height=10, borderwidth=2, relief="solid")
+slot_label.place(x=200, y=300)
+
+winnings_text = tk.StringVar()
+winnings_label = tk.Label(root, textvariable=winnings_text, font=("Helvetica", 16), bg="white", fg="black", width=30, height=3, borderwidth=2, relief="solid")
+winnings_label.place(x=200, y=420)
+
+# Start the main loop
+root.mainloop()
